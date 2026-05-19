@@ -1,0 +1,5 @@
+com\kpn\ndsal\json\validation\SchemaValidationDTO.class
+com\kpn\ndsal\kafkacommon\exception\ValidationException.class
+com\kpn\ndsal\kafkacommon\kafka\config\BaseListener.class
+com\kpn\ndsal\kafkacommon\kafka\config\BaseProducer.class
+com\kpn\ndsal\kafkacommon\config\KafkaCommonConfig.class

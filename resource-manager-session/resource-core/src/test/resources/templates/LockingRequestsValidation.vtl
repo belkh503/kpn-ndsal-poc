@@ -1,0 +1,20 @@
+[cols="4,1,2",options="header"]
+|===
+|Request JSON   |Valid? |Description
+
+#set( $count = 1 )
+
+#foreach( $item in $report )
+
+a|
+[source,json]
+----
+$item.json()
+----
+| $item.expectedResult()
+| $item.description() (#$count).
+
+#set( $count = $count + 1 )
+#end
+
+|===

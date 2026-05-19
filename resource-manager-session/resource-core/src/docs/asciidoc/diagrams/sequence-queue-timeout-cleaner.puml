@@ -1,0 +1,98 @@
+@startuml sequence-queue-timeout-cleaner
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam responseMessageBelowArrow true
+
+' Increase diagram width to prevent truncation
+skinparam dpi 150
+scale 1.2
+
+participant "<<Scheduled>>\nQueueTimeout\nCleanerTask" as task
+participant "Hazelcast\nQueue" as hazelcast
+database "Neo4j\nMapStore" as db
+participant "RequestProcessor\nService" as processor
+participant "AcquireLock\nResponseProducer" as producer
+actor "External\nSystem" as client
+
+[-> task : @Scheduled trigger\n(every 1 minute)
+activate task
+
+task -> hazelcast : beginTransaction()
+activate hazelcast
+
+task -> hazelcast : getQueue().values()
+hazelcast -> db : loadAll()
+activate db
+db --> hazelcast : all queue entities
+deactivate db
+
+hazelcast --> task : all requests in queue
+
+task -> task : sort by priority\nthen by timestamp
+
+loop for each request in queue
+    task -> processor : processRequestTimeout(entity)
+    activate processor
+
+    processor -> processor : calculate wait time =\ncurrent time - creation time
+
+    processor -> processor : check if timeout exceeded\n(wait time > default timeout)
+
+    alt timeout exceeded (wait time > 1 hour default)
+        processor -> processor : log timeout
+
+        processor -> producer : sendMessage(RESOURCES_ALREADY_LOCKED,\ncorrelationId)
+        activate producer
+
+        producer -> client : Kafka: AcquireLockResponse\n(status=ALREADY_LOCKED,\nerror=timeout)
+        deactivate producer
+
+        processor --> task : RequestTimeoutExceededException
+        deactivate processor
+
+        task -> hazelcast : remove(entity.id)
+        hazelcast -> db : delete(entity.id)
+        activate db
+        db --> hazelcast : deleted
+        deactivate db
+
+        note right of task
+          Request removed from queue
+          Requester notified of timeout
+        end note
+
+    else timeout not exceeded (still valid)
+        processor --> task : no exception
+        deactivate processor
+
+        note right of task
+          Request stays in queue
+          Will be processed later
+        end note
+    end
+end
+
+task -> hazelcast : commitTransaction()
+hazelcast --> task : committed
+deactivate hazelcast
+
+[<-- task : completed
+deactivate task
+
+note over task, client
+  **Key Points:**
+  • Runs on schedule (default: every 1 minute)
+  • Checks all requests in queue for timeout
+  • Default queue timeout: 1 hour (configurable)
+  • Timed-out requests removed from queue
+  • Requesters notified with RESOURCES_ALREADY_LOCKED
+  • Prevents infinite queue growth
+  • Different from lock timeout (queue vs lock)
+  • Transaction ensures consistency
+end note
+
+@enduml
+

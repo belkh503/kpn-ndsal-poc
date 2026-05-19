@@ -1,0 +1,15 @@
+domains:
+   domainsConfig:
+      bcpe:
+         maximumAllowedSessions: 3
+         systemTypes:
+         -  systemType: ge104
+         -  systemType: xg108
+            maximumAllowedSessions: 4
+      cc:
+         maximumAllowedSessions: 3
+         systemTypes:
+         -  systemType: asr
+            maximumAllowedSessions: 3
+         -  systemType: nexus
+            maximumAllowedSessions: 3

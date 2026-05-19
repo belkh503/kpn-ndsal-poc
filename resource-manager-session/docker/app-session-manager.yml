@@ -1,0 +1,23 @@
+# Session Manager application service definition
+# Used by docker-compose-pipeline.yml for containerised deployments
+
+version: '3.8'
+
+services:
+  app-session-manager:
+    image: ${APP_IMAGE_VERSION}
+    environment:
+      SERVER_PORT: 8081
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      SPRING_NEO4J_AUTHENTICATION_USERNAME: neo4j
+      SPRING_NEO4J_AUTHENTICATION_PASSWORD: neo4j
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-ndsal-broker:9093
+      SPRING_PROFILES_ACTIVE: prod
+      JAVA_OPTS: -Xmx512m -Xms256m
+      MICROSERVICE_NAME: session-manager
+      DEPLOYMENT_ENV: dev
+    healthcheck:
+      test: curl -k --fail --silent http://localhost:8081/management/health | grep UP || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12

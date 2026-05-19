@@ -1,0 +1,35 @@
+{
+  "domain": "BCPE",
+  "resources": [
+    {
+      "lock":
+      [
+        {
+          "type": "NODE",
+          "id": "nl-pbl-cpe-01"
+        },
+        {
+          "type": "PORT",
+          "id": "nl-pbl-cpe-01:1/1/2"
+        },
+        {
+          "type": "EAS",
+          "id": "EAS000002",
+          "force": "true"
+        },
+        {
+          "type": "EVA",
+          "id": "EVA000001"
+        },
+        {
+          "type": "EVA",
+          "id": "EVA000002"
+        },
+        {
+          "type": "EVA",
+          "id": "EVA000002"
+        }
+      ]
+    }
+  ]
+}

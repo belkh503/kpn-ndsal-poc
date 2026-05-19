@@ -1,0 +1,103 @@
+@startuml sequence-lock-timeout-cleaner
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam responseMessageBelowArrow true
+
+' Increase diagram width to prevent truncation
+skinparam dpi 150
+scale 1.2
+
+participant "<<Scheduled>>\nLockTimeout\nCleanerTask" as task
+participant "LoadLocks\nService" as loadSvc
+participant "LoadLocksPort\n(Adapter)" as loadAdapter
+database "Neo4j\nDatabase" as db
+participant "ReleaseLock\nService" as releaseSvc
+participant "DeleteLockPort\n(Adapter)" as deleteAdapter
+participant "ProcessQueue\nExecutorService" as executor
+
+[-> task : @Scheduled trigger\n(every 5 minutes)
+activate task
+
+task -> loadSvc : loadExpired()
+activate loadSvc
+
+loadSvc -> loadAdapter : findAllExpiredLocks()
+activate loadAdapter
+
+loadAdapter -> db : findAllExpired()\nWHERE timesOutAt < now()
+activate db
+db --> loadAdapter : List<LockRequestEntity>
+deactivate db
+
+loadAdapter --> loadSvc : List<LockRequest>
+deactivate loadAdapter
+
+loadSvc --> task : expiredLocks
+deactivate loadSvc
+
+alt expiredLocks not empty
+    loop for each expired lock
+        task -> task : log.error("timed out lock\nfor correlationId: {}", id)
+
+        task -> releaseSvc : release(lockRequest.getId())
+        activate releaseSvc
+
+        releaseSvc -> deleteAdapter : deleteLockRequest(lockId)
+        activate deleteAdapter
+
+        deleteAdapter -> db : deleteLockRequestEntity(lockId)
+        activate db
+        db -> db : delete lock and\nassociated objects
+        db --> deleteAdapter : deleted
+        deactivate db
+
+        deleteAdapter --> releaseSvc : completed
+        deactivate deleteAdapter
+
+        releaseSvc --> task : released
+        deactivate releaseSvc
+
+        note right of task
+          Lock forcibly removed
+          Resource now available
+        end note
+    end
+
+    task -> executor : startProcessing()
+    activate executor
+
+    note over executor
+      Trigger queue processing
+      Waiting requests can now
+      acquire the freed resources
+    end note
+
+    executor --> task : processing started
+    deactivate executor
+
+else expiredLocks is empty AND no exception during previous process
+    note over task
+      No action needed
+      All locks are valid
+    end note
+end
+
+[<-- task : completed
+deactivate task
+
+note over task, db
+  **Key Points:**
+  • Runs on schedule (default: every 5 minutes)
+  • Finds locks where timesOutAt < current time
+  • Forcibly removes expired locks
+  • Logs error for each timeout (for audit trail)
+  • Triggers queue processing after cleanup
+  • Prevents resource deadlocks from crashes
+  • Default lock timeout: 1 day (configurable per request)
+end note
+
+@enduml
+

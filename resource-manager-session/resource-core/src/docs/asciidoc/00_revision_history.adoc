@@ -1,0 +1,23 @@
+[[section-revision-history]]
+
+== Revision History
+
+[width="100%",cols="1,2,5,2",options="header"]
+.List of Technical Constraints
+.Revision History
+|===
+| Version
+| Date
+| Description
+| Name
+
+| 0.0.1
+| December 1, 2021
+| Initial Setup
+| V.V. Sapiha
+
+| 0.0.2
+| January 2, 2023
+| Update of RM
+| V.V. Sapiha
+|===

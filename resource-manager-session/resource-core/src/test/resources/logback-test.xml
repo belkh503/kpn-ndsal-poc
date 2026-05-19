@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+  <property name="LOG_PATTERN" value="%clr(%d{ISO8601}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr([%15.15t]){blue} %clr(%-50.50logger{49}){yellow} %clr(:){faint} %m %n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}" />
+
+  <appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+        <pattern>${LOG_PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <root level="info">
+    <appender-ref ref="Console"/>
+  </root>
+
+  <logger name="com.kpn.ndsal.resourcemanager" level="trace" additivity="false">
+    <appender-ref ref="Console"/>
+  </logger>
+
+  <logger name="org.hibernate" level="info"/>
+  <logger name="org.hibernate.SQL" level="DEBUG" />
+  <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE"/>
+  <logger name="org.springframework.jdbc.core.JdbcTemplate" level="DEBUG"/>
+  <logger name="com.tngtech.archunit" level="INFO" />
+
+</configuration>

@@ -1,0 +1,111 @@
+### Send POST request - lock resources #1
+POST http://localhost:8080/v1/lock
+Content-Type: application/json
+
+{
+  "domain" : "BCPE",
+  "lockGroups" : [ {
+    "lockObjects" : [ {
+      "type" : "NODE",
+      "id" : "nl-pbl-cpe-01",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:1/1/2",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:1/1/3",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:lag-01"
+    } ]
+  } ]
+}
+
+
+### Send POST request - lock resources #1
+POST http://localhost:8080/v1/lock
+Content-Type: application/json
+
+{
+  "domain" : "BCPE",
+  "lockGroups" : [ {
+    "lockObjects" : [ {
+      "type" : "NODE1",
+      "id" : "nl-pbl-cpe-01",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:1/1/2",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:1/1/3",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:lag-01"
+    } ]
+  } ]
+}
+
+### Send POST request - lock resources #2 - rejected!
+POST http://localhost:8080/v1/lock
+Content-Type: application/json
+
+{
+  "domain" : "BCPE",
+  "lockGroups" : [ {
+    "lockObjects" : [ {
+      "type" : "NODE",
+      "id" : "nl-pbl-cpe-01",
+      "force" : false
+    } ]
+  } ]
+}
+
+### Send POST request - lock resources #3 - rejected!
+POST http://localhost:8080/v1/lock
+Content-Type: application/json
+
+{
+  "domain" : "BCPE",
+  "lockGroups" : [ {
+    "lockObjects" : [ {
+      "type" : "NODE",
+      "id" : "nl-pbl-cpe-02",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-01:1/1/2",
+      "force" : false
+    } ]
+  } ]
+}
+
+### Send POST request - lock resources #4
+POST http://localhost:8080/v1/lock
+Content-Type: application/json
+
+{
+  "domain" : "BCPE",
+  "lockGroups" : [ {
+    "lockObjects" : [ {
+      "type" : "NODE",
+      "id" : "nl-pbl-cpe-02",
+      "force" : false
+    }, {
+      "type" : "PORT",
+      "id" : "nl-pbl-cpe-02:1/1/2",
+      "force" : false
+    } ]
+  } ]
+}
+
+### Send GET
+GET http://localhost:8080/v1/lock/091a4ee8-f796-485d-be4c-fa8e01cf973c
+
+### Send DELETE
+DELETE http://localhost:8080/v1/lock/091a4ee8-f796-485d-be4c-fa8e01cf973c

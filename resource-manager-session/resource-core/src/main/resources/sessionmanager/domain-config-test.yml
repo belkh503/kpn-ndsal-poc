@@ -1,0 +1,4 @@
+# Minimal domain-config-test.yml
+# Add your domain-specific configuration here
+example:
+  key: value

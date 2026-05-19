@@ -1,0 +1,5 @@
+com\kpn\ndsal\sharedneo4j\entity\SessionByTripletEntity.class
+com\kpn\ndsal\sharedneo4j\repository\SessionByTripletRepository.class
+com\kpn\ndsal\sharedneo4j\repository\RequestsByUuidRepository.class
+com\kpn\ndsal\sharedneo4j\entity\RequestsByUuidEntity.class
+com\kpn\ndsal\sharedneo4j\entity\CacheableMapStoreBaseEntity.class

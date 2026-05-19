@@ -1,0 +1,406 @@
+@startuml Resource Manager - Complete Class Diagram
+
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 80
+skinparam shadowing false
+
+' Color scheme
+skinparam class {
+    BackgroundColor<<Domain>> LightYellow
+    BorderColor<<Domain>> Orange
+    BackgroundColor<<Port>> LightBlue
+    BorderColor<<Port>> DarkBlue
+    BackgroundColor<<Service>> LightGreen
+    BorderColor<<Service>> DarkGreen
+    BackgroundColor<<Adapter>> LightPink
+    BorderColor<<Adapter>> DarkRed
+    BackgroundColor<<Entity>> Wheat
+    BorderColor<<Entity>> Brown
+    BackgroundColor<<Task>> LightCyan
+    BorderColor<<Task>> DarkCyan
+}
+
+package "Domain Model" <<Rectangle>> {
+    class LockRequest <<Domain>> {
+        - UUID id
+        - String domain
+        - String correlationId
+        - LocalDateTime created
+        - LocalDateTime timesOutAt
+        - boolean released
+        - String request
+        - List<LockObject> lockObjectEntities
+    }
+
+    class LockObject <<Domain>> {
+        - UUID id
+        - String name
+        - String type
+        - LockType lockType
+    }
+
+    enum LockType <<Domain>> {
+        SHARED
+        EXCLUSIVE
+    }
+
+    class Resource <<Domain>> {
+        - Integer id
+        - String type
+        - String name
+    }
+
+    LockRequest *-- "many" LockObject : contains
+    LockObject --> LockType : uses
+}
+
+package "Application Layer - Ports (IN)" <<Rectangle>> {
+    interface AcquireLockUseCase <<Port>> {
+        + UUID acquireLock(AcquireLockCommand, String, String, LocalDateTime)
+    }
+
+    interface ReleaseLockUseCase <<Port>> {
+        + void release(UUID lockId)
+    }
+
+    interface StatusLockQuery <<Port>> {
+        + boolean lockExist(UUID lockId)
+    }
+
+    interface RequestQueueUseCase <<Port>> {
+        + void addRequestToQueue(RequestQueueEntity)
+        + void deleteRequestFromQueue(RequestQueueEntity)
+    }
+
+    interface RequestProcessorUseCase <<Port>> {
+        + void processRequest(RequestQueueEntity)
+        + void processRequestTimeout(RequestQueueEntity)
+    }
+
+    interface LoadLocksUseCase <<Port>> {
+        + List<LockRequest> loadExpired()
+    }
+
+    interface RunningLocksCounterQuery <<Port>> {
+        + long getCount()
+    }
+
+    class AcquireLockCommand <<Port>> {
+        - List<LockGroup> lockGroups
+        + Set<LockObject> getAllExclusiveLockedObject()
+    }
+
+    class LockGroup {
+        - List<LockObject> lockObjects
+    }
+
+    AcquireLockCommand *-- "many" LockGroup
+    LockGroup *-- "many" LockObject
+}
+
+package "Application Layer - Ports (OUT)" <<Rectangle>> {
+    interface SaveLockRequestPort <<Port>> {
+        + UUID saveLockRequest(LockRequest)
+    }
+
+    interface LoadLockRequestPort <<Port>> {
+        + Optional<LockRequest> findLockRequest(UUID)
+    }
+
+    interface LoadLocksPort <<Port>> {
+        + List<LockRequest> findAllExpiredLocks()
+    }
+
+    interface DeleteLockPort <<Port>> {
+        + void deleteLockRequest(UUID)
+    }
+
+    interface CheckLockExistPort <<Port>> {
+        + boolean checkLockRequest(String domain, List<LockObject>)
+    }
+
+    interface RunningLocksCounterPort <<Port>> {
+        + long getLocksCount()
+    }
+}
+
+package "Application Layer - Services" <<Rectangle>> {
+    class AcquireLockService <<Service>> {
+        - SaveLockRequestPort saveLockRequestPort
+        - CheckLockExistPort checkLockExistPort
+        + UUID acquireLock(AcquireLockCommand, String, String, LocalDateTime)
+        - List<LockObject> getAllLockObjects(AcquireLockCommand)
+    }
+
+    class ReleaseLockService <<Service>> {
+        - DeleteLockPort deleteLockPort
+        + void release(UUID lockId)
+    }
+
+    class StatusLockService <<Service>> {
+        - LoadLockRequestPort loadLockRequestPort
+        + boolean lockExist(UUID lockId)
+    }
+
+    class RequestQueueService <<Service>> {
+        - HazelcastConfigurator hazelcastConfigurator
+        + void addRequestToQueue(RequestQueueEntity)
+        + void deleteRequestFromQueue(RequestQueueEntity)
+    }
+
+    class RequestProcessorService <<Service>> {
+        - AcquireLockUseCase acquireLockUseCase
+        - AcquireLockResponseProducer responseProducer
+        - RequestMapper requestMapper
+        - long defaultQueueItemTimeout
+        - LocalDateTime defaultLockTimeout
+        + void processRequest(RequestQueueEntity)
+        + void processRequestTimeout(RequestQueueEntity)
+        - boolean requestTimeoutExceeded(RequestQueueEntity)
+        - LocalDateTime toLocalDateTime(Timeout)
+    }
+
+    class LoadLocksService <<Service>> {
+        - LoadLocksPort loadLocksPort
+        + List<LockRequest> loadExpired()
+    }
+
+    class RunningLocksCounterService <<Service>> {
+        - RunningLocksCounterPort runningLocksCounterPort
+        + long getCount()
+    }
+
+    class ProcessQueueExecutorService <<Service>> {
+        - RequestProcessorService requestProcessor
+        - HazelcastConfigurator hazelcastConfigurator
+        - AtomicBoolean exceptionDuringProcess
+        - ThreadPoolExecutor threadPoolExecutor
+        + Future<?> startProcessing()
+    }
+
+    AcquireLockService ..|> AcquireLockUseCase
+    ReleaseLockService ..|> ReleaseLockUseCase
+    StatusLockService ..|> StatusLockQuery
+    RequestQueueService ..|> RequestQueueUseCase
+    RequestProcessorService ..|> RequestProcessorUseCase
+    LoadLocksService ..|> LoadLocksUseCase
+    RunningLocksCounterService ..|> RunningLocksCounterQuery
+
+    AcquireLockService ..> SaveLockRequestPort
+    AcquireLockService ..> CheckLockExistPort
+    ReleaseLockService ..> DeleteLockPort
+    StatusLockService ..> LoadLockRequestPort
+    LoadLocksService ..> LoadLocksPort
+    RunningLocksCounterService ..> RunningLocksCounterPort
+}
+
+package "Application Layer - Tasks" <<Rectangle>> {
+    class LockTimeoutCleanerTask <<Task>> {
+        - ReleaseLockUseCase releaseLockUseCase
+        - ProcessQueueExecutorService processQueueExecutorService
+        - LoadLocksService loadLocksService
+        + @Scheduled void startLockCleaner()
+    }
+
+    class QueueTimeoutCleanerTask <<Task>> {
+        - HazelcastConfigurator hazelcastConfigurator
+        - RequestProcessorService requestProcessorService
+        + @Scheduled void startQueueCleaner()
+    }
+
+    class ProcessQueueTask <<Task>> {
+        - HazelcastConfigurator hazelcastConfigurator
+        - RequestProcessorService requestProcessorService
+        - AtomicBoolean exceptionDuringProcess
+        + void run()
+    }
+
+    LockTimeoutCleanerTask ..> ReleaseLockUseCase
+    LockTimeoutCleanerTask ..> LoadLocksService
+    QueueTimeoutCleanerTask ..> RequestProcessorUseCase
+    ProcessQueueTask ..> RequestProcessorUseCase
+}
+
+package "Adapter Layer - IN (Kafka Listeners)" <<Rectangle>> {
+    class AcquireLockRequestListener <<Adapter>> {
+        - AcquireLockResponseProducer responseProducer
+        - RequestQueueUseCase requestQueueService
+        - RequestMapper requestMapper
+        - ProcessQueueExecutorService executorService
+        + @KafkaListener void listener(String, String, Map)
+        # void consume(AcquireLockRequestDto, String, String, Map)
+        + void handleErrorScenario(Exception, String, Map, String)
+        + void handleValidationErrorScenario(ValidationException, String, Map, String)
+    }
+
+    class DeleteLockRequestListener <<Adapter>> {
+        - DeleteLockResponseProducer responseProducer
+        - ReleaseLockUseCase releaseLockUseCase
+        - ProcessQueueExecutorService executorService
+        + @KafkaListener void listener(String, String, Map)
+        # void consume(DeleteLockRequestDto, String, String, Map)
+        + void handleErrorScenario(Exception, String, Map, String)
+        + void handleValidationErrorScenario(ValidationException, String, Map, String)
+    }
+
+    class GetLockStatusRequestListener <<Adapter>> {
+        - GetLockStatusResponseProducer responseProducer
+        - StatusLockQuery statusLockQuery
+        + @KafkaListener void listener(String, String, Map)
+        # void consume(GetLockStatusRequestDto, String, String, Map)
+        + void handleErrorScenario(Exception, String, Map, String)
+        + void handleValidationErrorScenario(ValidationException, String, Map, String)
+    }
+
+    AcquireLockRequestListener ..> RequestQueueUseCase
+    AcquireLockRequestListener ..> ProcessQueueExecutorService
+    DeleteLockRequestListener ..> ReleaseLockUseCase
+    DeleteLockRequestListener ..> ProcessQueueExecutorService
+    GetLockStatusRequestListener ..> StatusLockQuery
+}
+
+package "Adapter Layer - OUT (Persistence)" <<Rectangle>> {
+    class LockRequestAdapter <<Adapter>> {
+        - LockRequestMapper mapper
+        - LockRequestRepository lockRequestRepository
+        - LockObjectRepository lockObjectRepository
+        - Map<Pair<LockType, LockType>, Boolean> compatibilityMatrix
+        + boolean checkLockRequest(String, List<LockObject>)
+        + UUID saveLockRequest(LockRequest)
+        + Optional<LockRequest> findLockRequest(UUID)
+        + List<LockRequest> findAllExpiredLocks()
+        + void deleteLockRequest(UUID)
+        + long getLocksCount()
+    }
+
+    interface LockRequestRepository <<Adapter>> {
+        + void deleteLockRequestEntity(UUID)
+        + List<LockRequestEntity> findAllExpired()
+    }
+
+    interface LockObjectRepository <<Adapter>> {
+        + List<LockObjectEntity> findByDomainAndLockObjectEntitiesNameIn(String, List<String>)
+    }
+
+    class LockRequestEntity <<Entity>> {
+        - UUID id
+        - String domain
+        - String correlationId
+        - LocalDateTime created
+        - LocalDateTime timesOutAt
+        - boolean released
+        - String request
+        - List<LockObjectEntity> lockObjectEntities
+    }
+
+    class LockObjectEntity <<Entity>> {
+        - UUID id
+        - String name
+        - String type
+        - LockType lockType
+    }
+
+    LockRequestAdapter ..|> SaveLockRequestPort
+    LockRequestAdapter ..|> LoadLockRequestPort
+    LockRequestAdapter ..|> LoadLocksPort
+    LockRequestAdapter ..|> DeleteLockPort
+    LockRequestAdapter ..|> CheckLockExistPort
+    LockRequestAdapter ..|> RunningLocksCounterPort
+
+    LockRequestAdapter ..> LockRequestRepository
+    LockRequestAdapter ..> LockObjectRepository
+    LockRequestRepository --> LockRequestEntity
+    LockObjectRepository --> LockObjectEntity
+    LockRequestEntity *-- "many" LockObjectEntity
+}
+
+package "Adapter Layer - OUT (Kafka Producers)" <<Rectangle>> {
+    class AcquireLockResponseProducer <<Adapter>> {
+        + void sendMessage(AcquireLockResponseDto, String)
+    }
+
+    class DeleteLockResponseProducer <<Adapter>> {
+        + void sendMessage(DeleteLockResponseDto, String)
+    }
+
+    class GetLockStatusResponseProducer <<Adapter>> {
+        + void sendMessage(GetLockStatusResponseDto, String)
+    }
+}
+
+package "Application Layer - Queue Management" <<Rectangle>> {
+    class RequestQueueEntity <<Entity>> {
+        - UUID id
+        - String correlationId
+        - long creationTime
+        - int priority
+        - String domain
+        - Timeout timeout
+        - String payload
+    }
+
+    class RequestEntityMapStoreForNeo4J <<Service>> {
+        - ObjectMapper objectMapper
+        - RequestQueueEntityRepository repository
+        + void store(UUID, RequestQueueEntity)
+        + void storeAll(Map<UUID, RequestQueueEntity>)
+        + void delete(UUID)
+        + void deleteAll(Collection<UUID>)
+        + RequestQueueEntity load(UUID)
+        + Map<UUID, RequestQueueEntity> loadAll(Collection<UUID>)
+        + Iterable<UUID> loadAllKeys()
+    }
+
+    interface RequestQueueEntityRepository <<Adapter>> {
+        + Optional<RequestQueueDatabaseEntity> findByPid(UUID)
+    }
+
+    class RequestQueueDatabaseEntity <<Entity>> {
+        - UUID pid
+        - String payload
+    }
+
+    RequestEntityMapStoreForNeo4J ..> RequestQueueEntityRepository
+    RequestQueueEntityRepository --> RequestQueueDatabaseEntity
+}
+
+package "Configuration" <<Rectangle>> {
+    class HazelcastConfigurator {
+        - ApplicationContext applicationContext
+        + HazelcastInstance hazelcastInstance(RequestEntityMapStoreForNeo4J, boolean)
+        + TransactionalMap<UUID, RequestQueueEntity> getHazelcastRequestQueue(TransactionContext)
+        + TransactionContext getHazelcastContext()
+    }
+
+    HazelcastConfigurator ..> RequestEntityMapStoreForNeo4J
+}
+
+' Dependencies from services to configuration
+RequestQueueService ..> HazelcastConfigurator
+ProcessQueueExecutorService ..> HazelcastConfigurator
+
+note right of LockRequest
+  **Domain Entity**
+  Represents a lock acquisition
+  request with timeout and
+  correlation tracking
+end note
+
+note right of LockRequestAdapter
+  **Hexagonal Architecture**
+  Implements all persistence ports
+  and manages lock compatibility
+  matrix enforcement
+end note
+
+note right of HazelcastConfigurator
+  **Distributed Cache**
+  Configures Hazelcast with
+  Neo4j MapStore for request
+  queue persistence
+end note
+
+@enduml
+

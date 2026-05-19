@@ -1,0 +1,291 @@
+[[section-runtime-view]]
+== Runtime View
+
+This section describes how the Resource Manager works at runtime through different scenarios. Each scenario is illustrated with a sequence diagram showing the step-by-step flow of operations.
+
+=== Overview: How the System Works
+
+The Resource Manager acts like a smart traffic controller for shared resources. When multiple systems want to use the same resource at the same time, the Resource Manager decides who gets access and who needs to wait.
+
+Think of it like a parking garage:
+
+* When you arrive, you request a parking spot (acquire lock)
+* If a spot is available, you get it immediately
+* If no spots are available, you join a waiting queue
+* When someone leaves (releases lock), the next person in line gets the spot
+* If you wait too long, you get notified that parking is full
+
+[plantuml, commons-overview, png, align="center"]
+----
+include::diagrams/commons-diagram.puml[]
+----
+
+=== Scenario 1: Requesting a Lock (Acquire Lock)
+
+==== What Happens
+When an external system needs to use a resource, it sends a lock request. The system checks if the resource is available and either grants the lock immediately or puts the request in a waiting queue.
+
+==== The Flow
+[plantuml, sequence-acquire-lock, png, align="center"]
+----
+include::diagrams/sequence-acquire-lock.puml[]
+----
+
+==== Simple Explanation
+
+1. **Request Arrives**: An external system sends a message saying "I need to lock resource X"
+
+2. **Validation**: The system checks if the request is properly formatted
+
+3. **Add to Queue**: The request is added to a waiting queue with a priority level (HIGH, MEDIUM, or LOW)
+
+4. **Save for Safety**: The queue is saved to the database so nothing is lost if the system restarts
+
+5. **Start Processing**: The system begins checking if locks can be granted
+
+6. **Check Availability**: For each request in the queue (highest priority first):
+   * The system checks if the requested resource is already locked
+   * It uses compatibility rules to decide:
+     ** If resource is free → Grant the lock
+     ** If resource is busy → Leave request in queue to try again later
+
+7. **Grant Lock**: If successful:
+   * The lock is saved to the database
+   * A response with a lock ID is sent back
+   * The request is removed from the queue
+
+8. **Wait and Retry**: If unsuccessful:
+   * The request stays in the queue
+   * It will be tried again when someone releases a lock
+
+==== Key Points
+
+* **Priority Matters**: HIGH priority requests are processed before LOW priority
+* **Automatic Retry**: If a resource is busy, the system automatically tries again later
+* **No Data Loss**: Everything is saved to the database, even during restarts
+* **Fair System**: Within the same priority, older requests are processed first
+
+=== Scenario 2: Releasing a Lock
+
+==== What Happens
+When a system is done using a resource, it sends a release request. The lock is removed and any waiting requests get a chance to acquire the lock.
+
+==== The Flow
+[plantuml, sequence-release-lock, png, align="center"]
+----
+include::diagrams/sequence-release-lock.puml[]
+----
+
+==== Simple Explanation
+
+1. **Release Request**: An external system sends a message saying "I'm done with lock ID 123"
+
+2. **Validation**: The system checks if the lock ID is valid
+
+3. **Remove Lock**: The system removes the lock from the database, freeing up the resource
+
+4. **Send Confirmation**: A success message is sent back to confirm the lock was released
+
+5. **Process Queue**: The system immediately checks the waiting queue to see if any waiting requests can now be granted
+
+6. **Help Waiting Requests**: Requests that were waiting for this resource now get a chance to acquire the lock
+
+==== Key Points
+
+* **Immediate Cleanup**: Locks are removed right away
+* **Helps Others**: Releasing a lock automatically triggers processing of waiting requests
+* **Always Confirm**: You always get a confirmation when a lock is successfully released
+
+=== Scenario 3: Checking Lock Status
+
+==== What Happens
+An external system can check if a specific lock is still active. This is useful to verify if a lock was successfully acquired or to check its current status.
+
+==== The Flow
+[plantuml, sequence-get-lock-status, png, align="center"]
+----
+include::diagrams/sequence-get-lock-status.puml[]
+----
+
+==== Simple Explanation
+
+1. **Status Request**: An external system asks "Does lock ID 123 still exist?"
+
+2. **Validation**: The system checks if the request is properly formatted
+
+3. **Database Query**: The system looks up the lock ID in the database
+
+4. **Check Result**:
+   * If the lock exists → Send "Lock exists" response
+   * If the lock doesn't exist → Send "Lock not available" response
+
+5. **Send Response**: The answer is sent back immediately
+
+==== Key Points
+
+* **Quick Check**: Fast query that just checks if a lock exists
+* **No Side Effects**: Checking status doesn't affect the lock or queue
+* **Two Possible Answers**: Either "exists" or "not available"
+* **Useful for Verification**: Helps confirm lock operations were successful
+
+=== Scenario 4: Automatic Timeout Cleanup (Locks)
+
+==== What Happens
+Every few minutes, the system automatically checks for locks that have been active too long and removes them. This prevents resources from being locked forever if a system crashes or forgets to release a lock.
+
+==== The Flow
+[plantuml, sequence-lock-timeout-cleaner, png, align="center"]
+----
+include::diagrams/sequence-lock-timeout-cleaner.puml[]
+----
+
+==== Simple Explanation
+
+1. **Scheduled Check**: Every 5 minutes (configurable), the cleanup task runs automatically
+
+2. **Find Expired Locks**: The system queries the database for locks that have exceeded their time limit
+
+3. **Remove Each Lock**: For each expired lock:
+   * The system logs an error message for tracking
+   * The lock is removed from the database
+   * The resource becomes available again
+
+4. **Process Waiting Requests**: After cleanup, the system checks if any waiting requests can now get locks
+
+==== Key Points
+
+* **Automatic Protection**: Prevents resources from being locked forever
+* **Configurable Timeout**: Each lock request can specify how long it needs the lock
+* **Default Timeout**: If not specified, locks expire after 1 day (configurable)
+* **Scheduled Cleanup**: Runs every 5 minutes by default
+* **Error Logging**: All timeout removals are logged for troubleshooting
+
+=== Scenario 5: Automatic Queue Cleanup
+
+==== What Happens
+Every minute, the system checks for requests that have been waiting in the queue too long and removes them. This prevents the queue from growing forever and notifies requesters that their request timed out.
+
+==== The Flow
+[plantuml, sequence-queue-timeout-cleaner, png, align="center"]
+----
+include::diagrams/sequence-queue-timeout-cleaner.puml[]
+----
+
+==== Simple Explanation
+
+1. **Scheduled Check**: Every 1 minute (configurable), the queue cleanup task runs
+
+2. **Get All Queued Requests**: The system retrieves all waiting requests from the queue
+
+3. **Check Each Request**: For each request in the queue:
+   * Calculate how long it has been waiting
+   * Compare against the timeout limit (default: 1 hour)
+
+4. **Timeout Exceeded**: If a request has waited too long:
+   * Send a "resources already locked" message to the requester
+   * Remove the request from the queue
+   * This frees up space in the queue
+
+5. **Keep Waiting**: If a request hasn't timed out yet:
+   * Leave it in the queue
+   * It will be checked again in the next cleanup cycle
+
+==== Key Points
+
+* **Prevents Queue Overflow**: Ensures the queue doesn't grow indefinitely
+* **Notifies Requesters**: Systems are told their request timed out
+* **Configurable Timeout**: Default is 1 hour of waiting time
+* **Frequent Checks**: Runs every minute to keep the queue clean
+* **Fair Warning**: Requesters know why their lock wasn't granted
+
+=== Queueing System Details
+
+==== How the Queue Works
+
+All incoming acquire-lock requests are queued. The queue processor checks if locks can be acquired for queued requests.
+
+* **Shared Queue**: The queue is shared between all application instances using Hazelcast
+* **Persistent**: The queue is saved to the database, so requests survive system restarts
+* **Indexed**: Requests are indexed by priority (HIGH, MEDIUM, LOW) and timestamp
+* **Processing Order**: Highest priority first, then oldest requests within the same priority
+
+==== When Queue Processing Happens
+
+The queue is processed in these situations:
+
+1. **New Request**: After each acquire-lock request is added to the queue
+2. **Lock Released**: After each release-lock request frees up resources
+3. **Lock Timeout**: After expired locks are cleaned up
+4. **Queue Timeout**: After expired queue requests are removed
+
+==== Conflicting Locks
+
+If there is a conflicting lock in the database:
+
+* The request remains in the queue
+* It will be tried again when locks are released
+* It will be removed if it waits too long (queue timeout)
+
+=== Configuration
+
+==== Lock Timeouts
+
+Resource locks expire after a configurable time:
+
+* **Per Request**: Each request can specify its own timeout
+* **Default**: If not specified, locks expire after 1 day
+* **Cleanup Schedule**: Expired locks are cleaned every 5 minutes
+
+Configuration in `application.yml`:
+[source,yaml]
+----
+lock:
+  cleanerCronExpression: "0 */5 * * * *"  # Every 5 minutes
+  defaultTimeout:
+    value: 1
+    unit: day
+----
+
+==== Queue Timeouts
+
+Queued requests expire after a configurable time:
+
+* **Default**: Requests wait up to 1 hour
+* **Cleanup Schedule**: Expired queue items are cleaned every 1 minute
+
+Configuration in `application.yml`:
+[source,yaml]
+----
+requestQueue:
+  cleanerCronExpression: "0 */1 * * * *"  # Every 1 minute
+  timeout:
+    value: 1
+    unit: hour
+----
+
+=== Summary: Key Behaviors
+
+[cols="1,3,2"]
+|===
+| Behavior | Description | Typical Time
+
+| Lock Acquisition
+| Request comes in, checked immediately, queued if resource busy
+| Milliseconds
+
+| Queue Processing
+| All queued requests checked in priority order
+| Seconds
+
+| Lock Release
+| Resource freed, waiting requests get new chance
+| Milliseconds
+
+| Lock Timeout
+| Automatic cleanup of locks that ran too long
+| Every 5 minutes
+
+| Queue Timeout
+| Automatic cleanup of requests waiting too long
+| Every 1 minute
+|===

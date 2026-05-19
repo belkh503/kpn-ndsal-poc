@@ -1,0 +1,88 @@
+[[section-glossary]]
+== Glossary
+
+[role="help"]
+****
+.Contents
+The most important domain and technical terms that your stakeholders use when discussing the system.
+
+You can also see the glossary as source for translations if you work in multi-language teams.
+
+.Motivation
+You should clearly define your terms, so that all stakeholders
+
+* have an identical understanding of these terms
+* do not use synonyms and homonyms
+
+.Form
+A table with columns <Term> and <Definition>.
+
+Potentially more columns in case you need translations.
+
+****
+
+The most important domain and technical terms that stakeholders use when discussing the system.
+
+[options="header",cols="1,4,7"]
+|===
+| Term
+| Definition
+| Description
+
+| Node
+|
+|
+
+| Card
+|
+|
+
+| Slot
+|
+|
+
+| Port
+|
+|
+
+| LAG
+| Link Aggregation
+| Multiple parallel network connections can be used simultaneously to increase throughput beyond the limit that one link (one connection) can achieve
+
+| TAG
+|
+|
+
+| NNI
+| Network-to-Network Interface
+|
+
+| EAS
+| Ethernet Access Service
+|
+
+| EVA
+| Ethernet VPN Service
+|
+
+|EVS
+|*Ethernet VPN Service*
+|EVS is the transport instance for the traffic from EVA
+
+| FTU
+| Fiber Termination Unit
+|
+
+| CPE
+| Customer Premise Equipment
+|
+
+| DSLAM
+| Digital Subscriber Line Access Multiplexer
+|
+
+| BCPE
+|
+|
+
+|===

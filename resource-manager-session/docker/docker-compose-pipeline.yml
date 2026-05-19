@@ -1,0 +1,119 @@
+# Pipeline compose — runs both apps + infrastructure as containers
+# Used in CI/CD pipeline or full containerised local testing
+#
+# Usage: docker compose -f docker-compose-pipeline.yml --env-file docker-compose-pipeline.env up -d
+
+version: '3.8'
+
+networks:
+  resource-manager-net:
+    name: resource-manager-net
+    driver: bridge
+
+services:
+
+  neo4j:
+    image: neo4j:5.2.0-enterprise
+    hostname: neo4j
+    ports:
+      - '7474:7474'
+      - '7687:7687'
+    environment:
+      - NEO4J_AUTH=neo4j/neo4j
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4JLABS_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_allowlist=gds.*, apoc.*
+      - NEO4J_dbms_security_procedures_unrestricted=gds.*, apoc.*
+    volumes:
+      - neo4j-data:/var/lib/neo4j/data
+    networks:
+      - resource-manager-net
+    healthcheck:
+      test: [ "CMD-SHELL", "/var/lib/neo4j/bin/neo4j status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9.2
+    hostname: zookeeper
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_SERVER_ID=1
+      - ZOO_MAX_CNXNS=10
+      - ZOO_SERVERS=zookeeper:2888:3888
+    volumes:
+      - zookeeper-data:/bitnami/zookeeper
+    networks:
+      - resource-manager-net
+
+  kafka-ndsal-broker:
+    image: bitnami/kafka:3.7.0
+    hostname: kafka-ndsal-broker
+    stop_grace_period: "60s"
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_CLUSTER_ID=kafka-ndsal-cluster
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=INTERNAL://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://kafka-ndsal-broker:9093
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+    volumes:
+      - kafka-data:/bitnami/kafka
+    networks:
+      - resource-manager-net
+    depends_on:
+      - zookeeper
+
+  akhq:
+    image: tchiotludo/akhq:latest
+    hostname: akhq
+    ports:
+      - '8082:8080'
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            kafka-ndsal:
+              properties:
+                bootstrap.servers: "kafka-ndsal-broker:9093"
+    networks:
+      - resource-manager-net
+    depends_on:
+      - kafka-ndsal-broker
+
+  app-resource-manager:
+    extends:
+      file: app-resource-manager.yml
+      service: app-resource-manager
+    ports:
+      - '8080:8080'
+    networks:
+      - resource-manager-net
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      kafka-ndsal-broker:
+        condition: service_started
+
+  app-session-manager:
+    extends:
+      file: app-session-manager.yml
+      service: app-session-manager
+    ports:
+      - '8081:8081'
+    networks:
+      - resource-manager-net
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      kafka-ndsal-broker:
+        condition: service_started
+
+volumes:
+  neo4j-data:
+  zookeeper-data:
+  kafka-data:

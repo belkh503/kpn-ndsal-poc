@@ -1,0 +1,10 @@
+hazelcast:
+  cluster-name: hazelcast-resourcemanager
+  instance-name: dummy
+  network:
+    port:
+      auto-increment: true
+      port: 5701
+    join:
+      multicast:
+        enabled: true

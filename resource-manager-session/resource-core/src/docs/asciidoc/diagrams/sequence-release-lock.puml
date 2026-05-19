@@ -1,0 +1,91 @@
+@startuml sequence-release-lock
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam responseMessageBelowArrow true
+
+' Increase diagram width to prevent truncation
+skinparam dpi 150
+scale 1.2
+
+actor "External\nSystem" as client
+participant "DeleteLock\nRequestListener" as listener
+participant "ReleaseLock\nService" as releaseSvc
+participant "DeleteLock\nPort (Adapter)" as adapter
+database "Neo4j\nDatabase" as db
+participant "DeleteLock\nResponseProducer" as producer
+participant "ProcessQueue\nExecutorService" as executor
+participant "ProcessQueue\nTask" as task
+
+activate client
+client -> listener : Kafka: DeleteLockRequest\n(lockId)
+activate listener
+
+listener -> listener : validate JSON schema
+
+listener -> releaseSvc : release(lockId)
+activate releaseSvc
+
+releaseSvc -> adapter : deleteLockRequest(lockId)
+activate adapter
+
+adapter -> db : deleteLockRequestEntity(lockId)
+activate db
+db -> db : delete lock and\nassociated lock objects
+db --> adapter : deleted
+deactivate db
+
+adapter --> releaseSvc : completed
+deactivate adapter
+
+releaseSvc --> listener : released
+deactivate releaseSvc
+
+listener -> producer : sendMessage(LOCK_REMOVED,\ncorrelationId)
+activate producer
+
+producer -> client : Kafka: DeleteLockResponse\n(status=LOCK_REMOVED)
+deactivate producer
+
+listener -> executor : startProcessing()
+activate executor
+
+note over executor
+  Trigger queue processing to handle
+  any waiting requests that were
+  blocked by this lock
+end note
+
+executor -> task : submit(ProcessQueueTask)
+activate task
+
+task -> task : process waiting requests\nfrom queue
+
+note right of task
+  Any requests waiting for
+  the released resource will
+  now be retried
+end note
+
+task --> executor : future
+deactivate task
+
+executor --> listener : started
+deactivate executor
+
+listener --> client : ack
+deactivate listener
+
+note over client, db
+  **Key Points:**
+  • Lock removed from database immediately
+  • Response sent to confirm deletion
+  • Queue processing triggered automatically
+  • Waiting requests get chance to acquire lock
+  • Cascading delete removes lock objects
+end note
+
+@enduml
+

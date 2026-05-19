@@ -1,0 +1,27 @@
+#!/usr/bin/env groovy
+@Library('jenkins-pipeline-lib@version1.1')
+import com.nio.jenkins.utils.GitData
+import com.nio.jenkins.dto.DockerizedProjectArgs
+import com.nio.jenkins.dto.DockerBuildArgsBuilder
+
+def BASE_DOCKER_APP_JAVA_VERSION="neo/docker_app_java:alpine_3.21.3_0.12"
+
+DockerBuildArgsBuilder dockerBuildArgsBuilder = new DockerBuildArgsBuilder()
+dockerBuildArgsBuilder.addBuildArg("BASE_DOCKER_APP_JAVA_VERSION", BASE_DOCKER_APP_JAVA_VERSION.toString());
+
+DockerizedProjectArgs dockerizedProjectArgs = new DockerizedProjectArgs()
+dockerizedProjectArgs.setProjectName("resource-manager")
+dockerizedProjectArgs.setRepoName(GitData.GITHUB_AANEO_REPO_NAME)
+dockerizedProjectArgs.setDefaultNumVersion("1.0.15")
+dockerizedProjectArgs.setDockerBuildArgs(dockerBuildArgsBuilder.getBuildArgs())
+dockerizedProjectArgs.setDockerRunOpts("-e VERSION='1.0.0'")
+dockerizedProjectArgs.setDockerUser("root")
+dockerizedProjectArgs.setReadyTimeSec(15)
+dockerizedProjectArgs.setContainerPort(8080)
+dockerizedProjectArgs.setTeam("neo")
+dockerizedProjectArgs.setTestWithDockerCompose(true)
+dockerizedProjectArgs.setDockerDirectory("docker")
+dockerizedProjectArgs.setDockerComposeFile("docker-compose-pipeline.yml")
+dockerizedProjectArgs.setDockerComposeEnvFile("docker-compose-pipeline.env")
+
+buildDockerizedProject(dockerizedProjectArgs)

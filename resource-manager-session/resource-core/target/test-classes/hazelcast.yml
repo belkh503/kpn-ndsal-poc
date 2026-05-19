@@ -1,0 +1,6 @@
+hazelcast:
+  cluster-name: hazelcast-resourcemanager
+  network:
+    join:
+      multicast:
+        enabled: false

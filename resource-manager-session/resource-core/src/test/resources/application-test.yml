@@ -1,0 +1,42 @@
+server:
+  error:
+    include-binding-errors: always
+
+requestQueue:
+  cleanerCronExpression: 0 */1 * * * ?
+  timeout:
+    value: 1
+    unit: sec
+
+spring:
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
+    consumer:
+      acquire-lock-topic: rsm-acquire-lock-request
+      acquire-lock-client-id: rsm-acquire-lock-client-id
+      delete-lock-topic: rsm-delete-lock-request
+      delete-lock-client-id: rsm-delete-lock-client-id
+      get-lock-status-topic: rsm-get-lock-status-request
+      get-lock-status-client-id: rsm-get-lock-status-client-id
+      group-id: test-consumer-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      fetch-max-wait: 500
+      max-poll-records: 1
+    producer:
+      acquire-lock-response-topic: rsm-acquire-lock-response
+      acquire-lock-response-client-id: rsm-acquire-lock-client-id
+      delete-lock-response-topic: rsm-delete-lock-response
+      delete-lock-response-client-id: rsm-delete-lock-client-id
+      get-lock-status-response-topic: rsm-get-lock-status-response
+      get-lock-status-response-client-id: rsm-get-lock-status-client-id
+    properties:
+      spring.json.trusted.packages: "*"
+
+  neo4j:
+    pool:
+      metrics-enabled: true
+    uri: bolt://localhost:${spring.embeddedneo4j.bolt:7687}
+    authentication:
+      username: neo4j
+      password: password

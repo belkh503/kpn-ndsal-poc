@@ -1,0 +1,195 @@
+[[section-building-block-view]]
+
+== Building Block View
+
+[role="help"]
+****
+.Content
+The building block view shows the decomposition of the system into building blocks (modules, components, subsystems, classes,
+interfaces, packages, libraries, frameworks, layers, partitions, tiers, functions, macros, operations,
+datas structures, ...) as well as their dependencies (relationships, associations, ...)
+
+This view is mandatory for every architecture documentation.
+In analogy to a house this is the _floor plan_.
+
+.Motivation
+Maintain an overview of your source code by making its structure understandable through
+abstraction.
+
+This allows you to communicate with your stakeholder on an abstract level without disclosing implementation details.
+
+.Form
+The building block view are models based on the C4 model.
+****
+
+=== System Context Diagram
+
+[role="help"]
+****
+A System Context diagram is a good starting point for diagramming and documenting a software system, allowing you to step back and see the big picture. Draw a diagram showing your system as a box in the centre, surrounded by its users and the other systems that it interacts with.
+
+Detail isn't important here as this is your zoomed out view showing a big picture of the system landscape. The focus should be on people (actors, roles, personas, etc) and software systems rather than technologies, protocols and other low-level details. It's the sort of diagram that you could show to non-technical people.
+
+**Scope**: A single software system.
+
+**Primary elements**: The software system in scope. 
+Supporting elements: People and software systems directly connected to the software system in scope.
+
+**Intended audience**: Everybody, both technical and non-technical people, inside and outside of the software development team.
+****
+
+=== System Landscape Diagram
+
+[role="help"]
+****
+The C4 model provides a static view of a single software system but, in the real-world, software systems never live in isolation. For this reason, and particularly if you are responsible for a collection of software systems, it's often useful to understand how all of these software systems fit together within the bounds of an enterprise. To do this, simply add another diagram that sits "on top" of the C4 diagrams, to show the system landscape from an IT perspective. Like the System Context diagram, this diagram can show the organisational boundary, internal/external users and internal/external systems.
+
+Essentially this is a high-level map of the software systems at the enterprise level, with a C4 drill-down for each software system of interest. From a practical perspective, a system landscape diagram is really just a system context diagram without a specific focus on a particular software system.
+
+**Scope**: An enterprise.
+
+**Primary elements**: People and software systems related to the enterprise in scope.
+
+**Intended audience**: Technical and non-technical people, inside and outside of the software development team.
+****
+
+=== Container Diagram
+
+[role="help"]
+****
+Once you understand how your system fits in to the overall IT environment, a really useful next step is to zoom-in to the system boundary with a Container diagram. A "container" is something like a server-side web application, single-page application, desktop application, mobile app, database schema, file system, etc. Essentially, a container is a separately runnable/deployable unit (e.g. a separate process space) that executes code or stores data.
+
+The Container diagram shows the high-level shape of the software architecture and how responsibilities are distributed across it. It also shows the major technology choices and how the containers communicate with one another. It's a simple, high-level technology focussed diagram that is useful for software developers and support/operations staff alike.
+
+**Scope**: A single software system.
+
+**Primary elements**: Containers within the software system in scope. 
+Supporting elements: People and software systems directly connected to the containers.
+
+**Intended audience**: Technical people inside and outside of the software development team; including software architects, developers and operations/support staff.
+
+**Notes**: This diagram says nothing about deployment scenarios, clustering, replication, failover, etc.
+****
+
+=== Component Diagram
+
+[role="help"]
+****
+Next you can zoom in and decompose each container further to identify the major structural building blocks and their interactions.
+
+The Component diagram shows how a container is made up of a number of "components", what each of those components are, their responsibilities and the technology/implementation details.
+
+**Scope**: A single container.
+
+**Primary elements**: Components within the container in scope. 
+Supporting elements: Containers (within the software system in scope) plus people and software systems directly connected to the components.
+
+**Intended audience**: Software architects and developers.
+****
+
+[role="help"]
+[plantuml, diagram-components, png, align="center"]
+....
+title __Simple__ **component** example
+interface "Data Access" as DA
+
+DA - [First Component] 
+[First Component] ..> HTTP : use
+
+note left of HTTP : Web Service only
+
+note right of [First Component]
+  A note can also
+  be on several lines
+end note
+....
+
+=== Code/Class Diagram
+
+This diagram shows the complete structure of the Resource Manager application. It displays all the main building blocks (classes) and how they connect to each other.
+
+==== Understanding the Diagram
+
+The diagram is organized into different colored sections:
+
+* **Yellow (Domain)**: Core business concepts like locks and resources
+* **Blue (Ports)**: Interfaces that define what the system can do
+* **Green (Services)**: The actual code that does the work
+* **Pink (Adapters)**: Code that connects to external systems (Kafka, Database)
+* **Wheat (Entities)**: Database table structures
+* **Cyan (Tasks)**: Scheduled jobs that run automatically
+
+[plantuml, class-diagram-complete, png, align="center"]
+----
+include::diagrams/class-diagram-complete.puml[]
+----
+
+==== Key Components Explained Simply
+
+**Domain Model** (Yellow boxes at top):
+
+* `LockRequest`: Represents a request to lock resources
+* `LockObject`: A single resource that needs to be locked (like a specific port or device)
+* `LockType`: Whether a lock is SHARED (multiple users can have it) or EXCLUSIVE (only one user can have it)
+
+**Services** (Green boxes):
+
+* `AcquireLockService`: Handles requests to get a new lock
+* `ReleaseLockService`: Handles requests to release a lock
+* `StatusLockService`: Checks if a lock exists
+* `RequestQueueService`: Manages the waiting queue
+* `ProcessQueueExecutorService`: Processes waiting requests
+
+**Adapters** (Pink boxes):
+
+* **Kafka Listeners**: Receive messages from external systems
+* **Kafka Producers**: Send responses back to external systems
+* **Database Adapters**: Store and retrieve locks from the database
+
+**Tasks** (Cyan boxes):
+
+* `LockTimeoutCleanerTask`: Automatically removes old locks (runs every 5 minutes)
+* `QueueTimeoutCleanerTask`: Automatically removes old queue requests (runs every 1 minute)
+* `ProcessQueueTask`: Processes waiting lock requests
+
+==== How They Work Together
+
+1. **External Request Arrives** → Kafka Listener receives it
+2. **Add to Queue** → Request Queue Service stores it
+3. **Process Queue** → Process Queue Executor Service tries to grant locks
+4. **Check Availability** → Acquire Lock Service checks if resource is free
+5. **Save to Database** → Lock Request Adapter stores the lock
+6. **Send Response** → Kafka Producer sends confirmation back
+
+This architecture ensures:
+
+* Clear separation of concerns
+* Easy to test each component
+* Can swap out databases or message systems without changing business logic
+* Automatic cleanup prevents resource leaks
+
+=== Dynamic Diagram
+
+[role="help"]
+****
+A simple dynamic diagram can be useful when you want to show how elements in a static model collaborate at runtime to implement a user story, use case, feature, etc. This dynamic diagram is based upon a UML communication diagram (previously known as a "UML collaboration diagram"). It is similar to a UML sequence diagram although it allows a free-form arrangement of diagram elements with numbered interactions to indicate ordering.
+
+**Scope**: An enterprise, software system or container.
+
+**Primary and supporting elements**: Depends on the diagram scope; enterprise (see System Landscape diagram), software system (see System Context or Container diagrams), container (see Component diagram).
+
+**Intended audience**: Technical and non-technical people, inside and outside of the software development team.
+****
+
+=== Deployment Diagram
+
+[role="help"]
+****
+A deployment diagram allows you to illustrate how containers in the static model are mapped to infrastructure. This deployment diagram is based upon a UML deployment diagram, although simplified slightly to show the mapping between containers and deployment nodes. A deployment node is something like physical infrastructure (e.g. a physical server or device), virtualised infrastructure (e.g. IaaS, PaaS, a virtual machine), containerised infrastructure (e.g. a Docker container), an execution environment (e.g. a database server, Java EE web/application server, Microsoft IIS), etc. Deployment nodes can be nested.
+
+**Scope**: A single software system.
+
+**Primary elements**: Deployment nodes and containers within the software system in scope.
+
+**Intended audience**: Technical people inside and outside of the software development team; including software architects, developers and operations/support staff.
+****

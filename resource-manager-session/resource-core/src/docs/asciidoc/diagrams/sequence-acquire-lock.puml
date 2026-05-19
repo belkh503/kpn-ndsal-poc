@@ -1,0 +1,160 @@
+@startuml sequence-acquire-lock
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam responseMessageBelowArrow true
+
+' Increase diagram width to prevent truncation
+skinparam dpi 150
+scale 1.2
+
+actor "External\nSystem" as client
+participant "AcquireLock\nRequestListener" as listener
+participant "Request\nMapper" as mapper
+participant "RequestQueue\nService" as queueSvc
+participant "Hazelcast\nQueue" as hazelcast
+database "Neo4j\nMapStore" as db
+participant "ProcessQueue\nExecutorService" as executor
+participant "ProcessQueue\nTask" as task
+participant "RequestProcessor\nService" as processor
+participant "AcquireLock\nService" as lockSvc
+participant "LockRequest\nAdapter" as adapter
+participant "AcquireLock\nResponseProducer" as producer
+
+activate client
+client -> listener : Kafka: AcquireLockRequest\n(resources, domain, priority)
+activate listener
+
+listener -> listener : validate JSON schema
+listener -> mapper : map to RequestQueueEntity
+activate mapper
+mapper --> listener : RequestQueueEntity
+deactivate mapper
+
+listener -> queueSvc : addRequestToQueue(entity)
+activate queueSvc
+
+queueSvc -> hazelcast : beginTransaction()
+activate hazelcast
+
+queueSvc -> hazelcast : put(id, entity)
+hazelcast -> db : store(id, entity)
+activate db
+db --> hazelcast : saved
+deactivate db
+
+queueSvc -> hazelcast : commitTransaction()
+hazelcast --> queueSvc : committed
+deactivate hazelcast
+
+queueSvc --> listener : added
+deactivate queueSvc
+
+listener -> executor : startProcessing()
+activate executor
+
+executor -> task : submit(task)
+activate task
+
+task -> hazelcast : beginTransaction()
+activate hazelcast
+
+task -> hazelcast : getQueue().values()
+hazelcast --> task : all queue items
+
+task -> task : sort by priority\n(HIGH > MEDIUM > LOW)\nthen by timestamp
+
+loop for each request in queue (sorted)
+    task -> processor : processRequest(entity)
+    activate processor
+
+    processor -> mapper : toAcquireLockRequestDto()
+    activate mapper
+    mapper --> processor : AcquireLockRequestDto
+    deactivate mapper
+
+    processor -> processor : calculate timeout
+
+    processor -> lockSvc : acquireLock(command, domain,\ncorrelationId, timeout)
+    activate lockSvc
+
+    lockSvc -> lockSvc : getAllLockObjects()
+
+    lockSvc -> adapter : checkLockRequest(domain, lockObjects)
+    activate adapter
+
+    adapter -> db : findByDomainAndNameIn()
+    activate db
+    db --> adapter : existing locks
+    deactivate db
+
+    adapter -> adapter : check compatibility matrix\n(SHARED vs EXCLUSIVE)
+
+    alt resources available (no conflicts)
+        adapter --> lockSvc : available (true)
+
+        lockSvc -> adapter : saveLockRequest(lockRequest)
+        adapter -> db : save(LockRequestEntity)
+        activate db
+        db --> adapter : saved with UUID
+        deactivate db
+
+        adapter --> lockSvc : lockId (UUID)
+        lockSvc --> processor : lockId
+        deactivate lockSvc
+
+        processor -> producer : sendMessage(RESOURCES_LOCKED,\nlockId, correlationId)
+        activate producer
+        producer -> client : Kafka: AcquireLockResponse\n(status=LOCKED, lockId)
+        deactivate producer
+
+        processor --> task : success
+        deactivate processor
+
+        task -> hazelcast : remove(entity.id)
+        hazelcast -> db : delete(entity.id)
+        activate db
+        db --> hazelcast : deleted
+        deactivate db
+
+    else resources locked (conflicts exist)
+        adapter --> lockSvc : not available (false)
+        deactivate adapter
+        lockSvc --> processor : AcquireLockNotPossibleException
+        deactivate lockSvc
+        processor --> task : exception (leave in queue)
+        deactivate processor
+
+        note right of task
+          Request stays in queue
+          Will retry when lock released
+        end note
+    end
+end
+
+task -> hazelcast : commitTransaction()
+hazelcast --> task : committed
+deactivate hazelcast
+
+task --> executor : completed
+deactivate task
+executor --> listener : future
+deactivate executor
+
+listener --> client : processing started
+deactivate listener
+
+note over client, producer
+  **Key Points:**
+  • Requests queued by priority (HIGH, MEDIUM, LOW)
+  • Within same priority: FIFO order
+  • Compatibility check prevents conflicts
+  • Failed locks stay in queue for retry
+  • Success = lock saved + response sent + removed from queue
+  • Transaction ensures consistency
+end note
+
+@enduml
+

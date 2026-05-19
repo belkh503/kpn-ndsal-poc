@@ -1,0 +1,79 @@
+@startuml sequence-get-lock-status
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam responseMessageBelowArrow true
+
+' Increase diagram width to prevent truncation
+skinparam dpi 150
+scale 1.2
+
+actor "External\nSystem" as client
+participant "GetLockStatus\nRequestListener" as listener
+participant "StatusLock\nQuery (Service)" as statusSvc
+participant "LoadLockRequest\nPort (Adapter)" as adapter
+database "Neo4j\nDatabase" as db
+participant "GetLockStatus\nResponseProducer" as producer
+
+activate client
+client -> listener : Kafka: GetLockStatusRequest\n(lockId)
+activate listener
+
+listener -> listener : validate JSON schema
+
+listener -> statusSvc : lockExist(lockId)
+activate statusSvc
+
+statusSvc -> adapter : findLockRequest(lockId)
+activate adapter
+
+adapter -> db : findById(lockId)
+activate db
+
+alt lock exists in database
+    db --> adapter : Optional<LockRequestEntity>
+    adapter --> statusSvc : Optional<LockRequest>
+    deactivate db
+    deactivate adapter
+
+    statusSvc --> listener : true
+    deactivate statusSvc
+
+    listener -> producer : sendMessage(LOCK_EXISTS,\ncorrelationId)
+    activate producer
+
+    producer -> client : Kafka: GetLockStatusResponse\n(status=LOCK_EXISTS)
+    deactivate producer
+
+else lock not found
+    db --> adapter : Optional.empty()
+    deactivate db
+    adapter --> statusSvc : Optional.empty()
+    deactivate adapter
+
+    statusSvc --> listener : false
+    deactivate statusSvc
+
+    listener -> producer : sendMessage(LOCK_NOT_AVAILABLE,\ncorrelationId)
+    activate producer
+
+    producer -> client : Kafka: GetLockStatusResponse\n(status=LOCK_NOT_AVAILABLE)
+    deactivate producer
+end
+
+listener --> client : ack
+deactivate listener
+
+note over client, db
+  **Key Points:**
+  • Fast read-only query
+  • No side effects on locks or queue
+  • Two possible responses: EXISTS or NOT_AVAILABLE
+  • Used to verify lock acquisition success
+  • Useful for debugging and monitoring
+end note
+
+@enduml
+

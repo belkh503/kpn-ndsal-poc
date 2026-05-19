@@ -1,0 +1,134 @@
+cronExpression: 0/30 * * * * ?
+domains-config-path: classpath:\domain-config.yml
+
+lock:
+    cleanerCronExpression: 0 */1 * * * ?
+    defaultTimeout:
+        value: 1
+        unit: day
+
+requestQueue:
+    cleanerCronExpression: 0 */1 * * * ?
+    timeout:
+        value: 1
+        unit: hour
+
+cache:
+    writethrough:
+        enabled: true
+
+spring:
+    mvc:
+        locale: en_US
+    lifecycle:
+        timeout-per-shutdown-phase: 3
+    main:
+        allow-bean-definition-overriding: true
+    profiles:
+        active: dev
+    application:
+        name: KPN-NDSAL-ResouceManager
+    output:
+        ansi:
+            enabled: always
+    neo4j:
+        authentication:
+            password: password
+            username: neo4j
+        uri: bolt://localhost:7687
+    test:
+        restdocs:
+            outputDir: /build/snapshot
+
+    kafka:
+        bootstrap-servers: localhost:9092
+        listener:
+            ack-mode: RECORD
+        consumer:
+            enable-auto-commit: true
+            acquire-lock-topic: rsm-acquire-lock-request
+            acquire-lock-client-id: rsm-acquire-lock-client-id
+            delete-lock-topic: rsm-delete-lock-request
+            delete-lock-client-id: rsm-delete-lock-client-id
+            get-lock-status-topic: rsm-get-lock-status-request
+            get-lock-status-client-id: rsm-get-lock-status-client-id
+            acquire-topic: ssm-sessions-acquire-request
+            acquire-client-id: ssm-sessions-acquire-client-id
+            release-topic: ssm-sessions-release-request
+            release-client-id: ssm-sessions-release-client-id
+            group-id: test-consumer-group
+        producer:
+            value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+            acquire-lock-response-topic: rsm-acquire-lock-response
+            acquire-lock-response-client-id: rsm-acquire-lock-client-id
+            acquire-response-topic: ssm-sessions-acquire-response
+            acquire-response-client-id: ssm-sessions-acquire-client-id
+            release-response-topic: ssm-sessions-release-response
+            release-response-client-id: ssm-sessions-release-client-id
+            delete-lock-response-topic: rsm-delete-lock-response
+            delete-lock-response-client-id: rsm-delete-lock-client-id
+            get-lock-status-response-topic: rsm-get-lock-status-response
+            get-lock-status-response-client-id: rsm-get-lock-status-client-id
+        properties:
+            spring.json.trusted.packages: "*"
+
+management:
+    endpoints:
+      web:
+         base-path: /management
+         exposure:
+            include: health,info,metrics,prometheus,openapi,swaggerui
+    endpoint:
+        metrics:
+            enabled: true
+        prometheus:
+            enabled: true
+    metrics:
+        export:
+            prometheus:
+                enabled: true
+
+springdoc:
+    show-actuator: false
+    packages-to-scan: com.kpn.ndsal.resourcemanager
+    api-docs:
+        enabled: true
+        groups:
+            enabled: true
+    swagger-ui:
+        display-request-duration: true
+        groups-order: DESC
+        path: /swagger-ui.html
+        url: /v3/api-docs
+    use-management-port: false
+
+---
+#
+#   DEV profile
+#
+#   spring.profiles.active=dev
+#
+spring:
+    config:
+        activate:
+            on-profile: dev
+
+---
+#
+#   *Neo4j Profile*:
+#
+spring:
+    config:
+        activate:
+            on-profile: n4g
+
+    neo4j:
+        uri: bolt://localhost:7687
+        authentication:
+            username:
+            password:
+
+
+
+
+

@@ -1,0 +1,68 @@
+# Kafka + Zookeeper + AKHQ service definitions
+#
+# IMPORTANT: Add the following entry to your hosts file so the Kafka broker
+# hostname resolves to your local machine:
+#
+#   Windows: C:\Windows\System32\drivers\etc\hosts
+#   Linux/Mac: /etc/hosts
+#
+#   127.0.0.1  kafka-ndsal-broker
+#
+# AKHQ Kafka GUI available at http://localhost:8082/
+
+version: '3.8'
+
+services:
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9.2
+    hostname: zookeeper
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_SERVER_ID=1
+      - ZOO_MAX_CNXNS=10
+      - ZOO_SERVERS=zookeeper:2888:3888
+    volumes:
+      - zookeeper-data:/bitnami/zookeeper
+
+  kafka-ndsal-broker:
+    image: bitnami/kafka:3.7.0
+    hostname: kafka-ndsal-broker
+    stop_grace_period: "60s"
+    ports:
+      - '9092:9092'
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_CLUSTER_ID=kafka-ndsal-cluster
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      # CLIENT: used by Spring Boot apps running on the host (localhost:9092)
+      # INTERNAL: used by containers (e.g. AKHQ) inside the Docker network
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,INTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=CLIENT://:9092,INTERNAL://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://localhost:9092,INTERNAL://kafka-ndsal-broker:9093
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+    volumes:
+      - kafka-data:/bitnami/kafka
+    depends_on:
+      - zookeeper
+
+  akhq:
+    image: tchiotludo/akhq:latest
+    hostname: akhq
+    ports:
+      - '8082:8080'
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            kafka-ndsal:
+              properties:
+                bootstrap.servers: "kafka-ndsal-broker:9093"
+    depends_on:
+      - kafka-ndsal-broker
+
+volumes:
+  zookeeper-data:
+  kafka-data:

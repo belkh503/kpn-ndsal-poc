@@ -1,0 +1,37 @@
+domains-config-path: classpath:\domain-config-test.yml
+
+cronExpression: 0/15 * * * * ?
+
+
+server:
+  error:
+    include-binding-errors: always
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 3
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers}
+    consumer:
+      enable-auto-commit: true
+      acquire-topic: ssm-sessions-acquire-request
+      acquire-client-id: ssm-sessions-acquire-client-id
+      release-topic: ssm-sessions-release-request
+      release-client-id: ssm-sessions-release-client-id
+      group-id: test-consumer-group
+      properties:
+          auth-exception-retry-interval-ms: 1000
+    producer:
+      acquire-response-topic: ssm-sessions-acquire-response
+      acquire-response-client-id: ssm-sessions-acquire-client-id
+      release-response-topic: ssm-sessions-release-response
+      release-response-client-id: ssm-sessions-release-client-id
+    properties:
+      spring.json.trusted.packages: "*"
+  neo4j:
+    pool:
+      metrics-enabled: true
+    uri: bolt://localhost:${spring.embeddedneo4j.bolt}
+    authentication:
+      username: neo4j
+      password: password
